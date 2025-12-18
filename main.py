@@ -5,7 +5,7 @@ import re
 import os
 import pandas as pd
 import numpy as np
-import google.generativeai as genai
+from google import genai
 from pypdf import PdfReader
 from datetime import datetime, timedelta
 from pandas import json_normalize, DataFrame # New import for flattening JSON
@@ -21,9 +21,9 @@ def configure_genai():
     if not GOOGLE_API_KEY or GOOGLE_API_KEY == "YOUR_GEMINI_API_KEY":
         raise ValueError("Gemini API Key is missing or not configured.")
     try:
-        genai.configure(api_key=GOOGLE_API_KEY)
+        client = genai.Client()
         # Test model initialization
-        return genai.GenerativeModel('gemini-2.5-flash')
+        return client
     except Exception as e:
         raise RuntimeError(f"Failed to configure Google GenAI: {e}")
 
@@ -71,9 +71,9 @@ def analyze_with_gemini(row, document_text):
     3. Identify any specific financial commitments or changes to share structure.
     4. Provide a 'Sentiment Score' from 1 to 10.
     """
-
+    client = configure_genai()
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
         # TODO send to discord
         return response.text
     except Exception as e:
