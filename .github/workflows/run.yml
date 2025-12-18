@@ -1,0 +1,66 @@
+name: TMX Data Pipeline
+
+# Controls when the workflow will run
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  
+  # Optional: Run the workflow on a schedule (e.g., every Monday at 8:00 AM)
+  schedule:
+    # This example uses cron syntax for Monday at 8:00 AM UTC
+    # You might need to adjust the timing to ensure the listing file is updated
+    - cron: '0 8 * * 1-5' 
+  push:
+      branches:
+        - main
+
+# A sequence of jobs to run
+jobs:
+  run-data-fetch:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # 1. Checks out your repository code so your workflow can access it
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Python environment
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          
+      # 3. Install dependencies from the requirements.txt file
+      # Note: The code uses `pandas`, `requests`, and `typing`. 
+      # Assuming you have a `requirements.txt` file with these dependencies.
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+ 
+      # 5. Execute the Python script
+      - name: Run Data Fetch Script
+        id: run_script
+        run: python main.py
+
+      # 6. Upload the final filtered data file as an artifact
+      - name: Upload Final Data Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-ticker-data
+          path: final_ticker_data_flattened.csv
+          # Optional: Add other resulting files like 'non_etf_tickers.csv' if needed
+          # path: |
+          #   final_ticker_data_flattened.csv
+          #   test.csv
+          #   non_etf_tickers.csv
+          
+      # 7. Upload the intermediate ticker list file as an artifact
+      - name: Upload Intermediate Tickers Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: filtered-tickers-list
+          path: filtered.csv
