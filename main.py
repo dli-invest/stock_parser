@@ -731,7 +731,7 @@ if __name__ == "__main__":
         # entries
         # entries = df_final_report.head()
         # for idx, row in df_final_report.iterrows():
-        for idx, row in entrdf_final_reporties.iterrows():
+        for idx, row in df_final_report.iterrows():
             print("using gemini to scan through entries")
             ticker = row['Ticker']
             filing_url = row['Filing_URL']
