@@ -55,7 +55,8 @@ def analyze_with_gemini(row, document_text):
         "gemini-2.5-flash-lite",
         "gemini-2.5-flash",
         "gemini-3-flash-preview", 
-        "gemma-3-4b-it"
+        "gemma-3-4b-it",
+        'gemma-3-12b'
     ]
     # Prepare the context from the dataframe row
     ticker = row.get('Ticker', 'Unknown')
@@ -770,8 +771,9 @@ if __name__ == "__main__":
                 content = extract_text_from_pdf(file_path)
                 analysis_results = analyze_with_gemini(row, content)
                 # check if analysis_results is a dict, if so extract
-                if analysis_results.get('analysis'):
-                    analysis_results = analysis_results
+                if type(analysis_results) == dict:
+                    if analysis_results.get('analysis'):
+                        analysis_results = analysis_results
                 send_to_discord(ticker, analysis_results, filing_url)
             else:
                 print(f"Skipping {ticker} due to download failure.")
