@@ -729,9 +729,9 @@ if __name__ == "__main__":
         print(f"Processed {len(df_final_report)} tickers with new filings.")
         print(df_final_report[['Ticker', 'Filing_Title', 'Filing_URL']].head())
         # entries
-        entries = df_final_report.head()
+        # entries = df_final_report.head()
         # for idx, row in df_final_report.iterrows():
-        for idx, row in entries.iterrows():
+        for idx, row in entrdf_final_reporties.iterrows():
             print("using gemini to scan through entries")
             ticker = row['Ticker']
             filing_url = row['Filing_URL']
