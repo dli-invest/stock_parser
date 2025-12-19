@@ -738,8 +738,7 @@ if __name__ == "__main__":
             # download the file in the list, extract the text, print that the text is extracted
             file_path = download_file(filing_url)
             if file_path and os.path.exists(file_path):
-                content = extract_text_from_pdf(local_file)
-                file_text = extract_text_from_pdf(file_path)
+                content = extract_text_from_pdf(file_path)
                 analysis_results = analyze_with_gemini(model, row, content)
                 send_to_discord(ticker, analysis_results, filing_url)
             else:
