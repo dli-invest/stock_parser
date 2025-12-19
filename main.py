@@ -6,6 +6,7 @@ import os
 import pandas as pd
 import numpy as np
 from google import genai
+from google.genai import types
 from pypdf import PdfReader
 from datetime import datetime, timedelta
 from pandas import json_normalize, DataFrame # New import for flattening JSON
