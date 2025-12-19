@@ -739,7 +739,7 @@ if __name__ == "__main__":
             file_path = download_file(filing_url)
             if file_path and os.path.exists(file_path):
                 content = extract_text_from_pdf(file_path)
-                analysis_results = analyze_with_gemini(model, row, content)
+                analysis_results = analyze_with_gemini(row, content)
                 send_to_discord(ticker, analysis_results, filing_url)
             else:
                 print(f"Skipping {ticker} due to download failure.")
