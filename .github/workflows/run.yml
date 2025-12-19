@@ -14,6 +14,9 @@ on:
       branches:
         - main
 
+env:
+  DISCORD_WEBHOOK: ${{ secrets.DISCORD_NEWS_WEBHOOK }}
+  GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 # A sequence of jobs to run
 jobs:
   run-data-fetch:
@@ -51,7 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: final-ticker-data
-          path: final_ticker_data_flattened.csv
+          path: active_filings_with_financials.csv
           # Optional: Add other resulting files like 'non_etf_tickers.csv' if needed
           # path: |
           #   final_ticker_data_flattened.csv
