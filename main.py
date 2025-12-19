@@ -746,7 +746,7 @@ if __name__ == "__main__":
                 send_to_discord(ticker, f"Skipping {ticker} due to download failure.", filing_url)
 
             # assuming 20 rpm, so wait 5 seconds per entry
-            time.sleep(5)
+            time.sleep(20)
     else:
         print("\nNo companies in your filtered universe filed documents today.")
 
