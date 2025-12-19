@@ -773,8 +773,9 @@ if __name__ == "__main__":
                 analysis_results = analyze_with_gemini(row, content)
                 # check if analysis_results is a dict, if so extract
                 if type(analysis_results) == dict:
+                    print("analysis_results")
                     if analysis_results.get('analysis'):
-                        analysis_results = analysis_results
+                        analysis_results = analysis_results.get('analysis')
                 send_to_discord(ticker, analysis_results, filing_url)
             else:
                 print(f"Skipping {ticker} due to download failure.")
