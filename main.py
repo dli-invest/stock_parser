@@ -737,7 +737,7 @@ if __name__ == "__main__":
             filing_url = row['Filing_URL']
             # download the file in the list, extract the text, print that the text is extracted
             file_path = download_file(filing_url)
-            if local_file and os.path.exists(local_file):
+            if file_path and os.path.exists(file_path):
                 content = extract_text_from_pdf(local_file)
                 file_text = extract_text_from_pdf(file_path)
                 analysis_results = analyze_with_gemini(model, row, content)
