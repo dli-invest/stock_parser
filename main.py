@@ -51,7 +51,12 @@ def send_to_discord(ticker, analysis_text, filing_url):
         print(f"Failed to send Discord notification: {e}")
 
 def analyze_with_gemini(row, document_text):
-    
+    models_to_try = [
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-3-flash-preview", 
+        "gemma-3-4b-it"
+    ]
     # Prepare the context from the dataframe row
     ticker = row.get('Ticker', 'Unknown')
     mkt_cap = row.get('MarketCap', 'N/A')
@@ -73,9 +78,33 @@ def analyze_with_gemini(row, document_text):
     """
     client = configure_genai()
     try:
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-        # TODO send to discord
-        return response.text
+        for model_id in models_to_try:
+            try:
+                print(f"Attempting analysis with {model_id}...")
+                
+                # The SDK handles basic retries internally, but we catch 429 for model-switching
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.2, # Lower temperature for analytical consistency
+                    )
+                )
+                
+                # Success! Return the text
+                return {
+                    "model_used": model_id,
+                    "analysis": response.text
+                }
+
+            except Exception as e:
+                error_msg = str(e)
+                if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                    print(f"⚠️ Rate limit hit on {model_id}. Switching to next model...")
+                    time.sleep(2) # Brief pause before trying next model
+                    continue
+                else:
+                    return f"Critical Error with {model_id}: {e}"
     except Exception as e:
         return f"Gemini Analysis Error: {e}"
 
@@ -740,13 +769,16 @@ if __name__ == "__main__":
             if file_path and os.path.exists(file_path):
                 content = extract_text_from_pdf(file_path)
                 analysis_results = analyze_with_gemini(row, content)
+                # check if analysis_results is a dict, if so extract
+                if analysis_results.get('analysis'):
+                    analysis_results = analysis_results
                 send_to_discord(ticker, analysis_results, filing_url)
             else:
                 print(f"Skipping {ticker} due to download failure.")
                 send_to_discord(ticker, f"Skipping {ticker} due to download failure.", filing_url)
 
             # assuming 20 rpm, so wait 5 seconds per entry
-            time.sleep(20)
+            time.sleep(10)
     else:
         print("\nNo companies in your filtered universe filed documents today.")
 
