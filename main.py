@@ -819,9 +819,9 @@ if __name__ == "__main__":
                     time.sleep(2) 
                     continue 
                 else:
-                    return f"Critical Error with {model_id}: {e}"
+                    print(f"Critical Error with {model_id}: {e}")
     
-        return "All models failed or were rate-limited."
+        print("All models failed or were rate-limited.")
     else:
         print("\nNo companies in your filtered universe filed documents today.")
 
