@@ -16,6 +16,13 @@ from typing import Union
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GEMINI_API_KEY")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
+models_to_try = [
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-3-flash-preview", 
+    "gemma-3-4b-it",
+    'gemma-3-12b'
+]
 
 def configure_genai():
     """Initializes and validates the Gemini configuration."""
@@ -52,13 +59,6 @@ def send_to_discord(ticker, analysis_text, filing_url):
         print(f"Failed to send Discord notification: {e}")
 
 def analyze_with_gemini(row, document_text):
-    models_to_try = [
-        "gemini-2.5-flash-lite",
-        "gemini-2.5-flash",
-        "gemini-3-flash-preview", 
-        "gemma-3-4b-it",
-        'gemma-3-12b'
-    ]
     # Prepare the context from the dataframe row
     ticker = row.get('Ticker', 'Unknown')
     mkt_cap = row.get('MarketCap', 'N/A')
@@ -74,9 +74,7 @@ def analyze_with_gemini(row, document_text):
     
     TASK:
     1. Summarize the core news in 2 sentences.
-    2. Determine if this is "Market Moving" (Positive, Negative, or Neutral).
-    3. Identify any specific financial commitments or changes to share structure.
-    4. Provide a 'Sentiment Score' from 1 to 10.
+    2. Identify any specific financial commitments or changes to share structure. Keep this to 4 sentences or less.
     """
     client = configure_genai()
     try:
@@ -762,6 +760,7 @@ if __name__ == "__main__":
         # entries
         # entries = df_final_report.head()
         # for idx, row in df_final_report.iterrows():
+        report_data = []
         for idx, row in df_final_report.iterrows():
             print("using gemini to scan through entries")
             ticker = row['Ticker']
@@ -777,12 +776,53 @@ if __name__ == "__main__":
                     if analysis_results.get('analysis'):
                         analysis_results = analysis_results.get('analysis')
                 send_to_discord(ticker, analysis_results, filing_url)
+                report_data.append(analysis_results)
             else:
                 print(f"Skipping {ticker} due to download failure.")
                 send_to_discord(ticker, f"Skipping {ticker} due to download failure.", filing_url)
 
             # assuming 20 rpm, so wait 5 seconds per entry
             time.sleep(10)
+        # use another query to 
+        prompt = f"""
+            You are a professional Canadian equity analyst. Look at the following stock summaries and provide information on the best news.
+            
+            {"\n".join(report_data)}
+            
+            TASK: Return the top 5 tickers based on news quality and potential upside.
+        """
+
+        client = configure_genai()
+    
+        for model_id in models_to_try:
+            try:
+                print(f"Attempting analysis with {model_id}...")
+                
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.2,
+                    )
+                )
+                
+                analysis_results = response.text
+                
+                send_to_discord("summary", analysis_results, "https://github.com/dli-invest/stock_parser")
+                
+                return analysis_results
+    
+            except Exception as e:
+                error_msg = str(e)
+                # Fix 3: Logic to catch 429 and iterate to the next model
+                if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                    print(f"⚠️ Rate limit hit on {model_id}. Switching to next model...")
+                    time.sleep(2) 
+                    continue 
+                else:
+                    return f"Critical Error with {model_id}: {e}"
+    
+        return "All models failed or were rate-limited."
     else:
         print("\nNo companies in your filtered universe filed documents today.")
 
