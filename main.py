@@ -807,10 +807,9 @@ if __name__ == "__main__":
                 )
                 
                 analysis_results = response.text
-                
+                print("analysis_results", analysis_results)
                 send_to_discord("summary", analysis_results, "https://github.com/dli-invest/stock_parser")
                 
-                return analysis_results
     
             except Exception as e:
                 error_msg = str(e)
