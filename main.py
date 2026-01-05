@@ -11,8 +11,14 @@ from pypdf import PdfReader
 from datetime import datetime, timedelta
 from pandas import json_normalize, DataFrame # New import for flattening JSON
 from gql_queries import GQL
-
 from typing import Union
+from pydantic import BaseModel
+
+class FilingAnalysis(BaseModel):
+    core_summary: str
+    financial_impact: str
+    importance_score: int # Scale of 1-10
+    sentiment: str # e.g., Positive, Neutral, Negative
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GEMINI_API_KEY")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
@@ -74,7 +80,8 @@ def analyze_with_gemini(row, document_text):
     
     TASK:
     1. Summarize the core news in 2 sentences.
-    2. Identify any specific financial commitments or changes to share structure. Keep this to 4 sentences or less.
+    2. Identify specific financial or share structure changes.
+    3. Assign an importance_score from 1-10 (10 being a major merger/acquisition or massive earnings beat, or massive developments in the company).
     """
     client = configure_genai()
     try:
@@ -87,14 +94,16 @@ def analyze_with_gemini(row, document_text):
                     model=model_id,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        temperature=0.2, # Lower temperature for analytical consistency
+                        temperature=0.1, # Lower for structured data
+                        response_mime_type="application/json",
+                        response_schema=FilingAnalysis,
                     )
                 )
                 
                 # Success! Return the text
                 return {
                     "model_used": model_id,
-                    "analysis": response.text
+                    "analysis": response.parsed
                 }
 
             except Exception as e:
@@ -773,8 +782,14 @@ if __name__ == "__main__":
                 # check if analysis_results is a dict, if so extract
                 if type(analysis_results) == dict:
                     print("analysis_results")
-                    if analysis_results.get('analysis'):
-                        analysis_results = analysis_results.get('analysis')
+                    if analysis_results.get('core_summary'):
+                        analysis_results = analysis_results.get('core_summary')
+
+                    if analysis_results.get('importance_score', 0) < 5:
+                        print("passing on entries not that important", analysis_results)
+                        continue
+                        
+                    # we want to skip entries that do not have high enough score
                 send_to_discord(ticker, analysis_results, filing_url)
                 report_data.append(analysis_results)
             else:
