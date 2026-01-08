@@ -14,12 +14,6 @@ from gql_queries import GQL
 from typing import Union
 from pydantic import BaseModel
 
-class FilingAnalysis(BaseModel):
-    core_summary: str
-    financial_impact: str
-    importance_score: int # Scale of 1-10
-    sentiment: str # e.g., Positive, Neutral, Negative
-
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GEMINI_API_KEY")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
 models_to_try = [
@@ -95,15 +89,15 @@ def analyze_with_gemini(row, document_text):
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         temperature=0.1, # Lower for structured data
-                        response_mime_type="application/json",
-                        response_schema=FilingAnalysis,
+                        # response_mime_type="application/json",
+                        # response_schema=FilingAnalysis,
                     )
                 )
                 
                 # Success! Return the text
                 return {
                     "model_used": model_id,
-                    "analysis": response.parsed
+                    "analysis": response.text
                 }
 
             except Exception as e:
@@ -781,13 +775,9 @@ if __name__ == "__main__":
                 analysis_results = analyze_with_gemini(row, content)
                 # check if analysis_results is a dict, if so extract
                 if type(analysis_results) == dict:
-                    print("analysis_results")
-                    if analysis_results.get('core_summary'):
-                        analysis_results = analysis_results.get('core_summary')
-
-                    if analysis_results.get('importance_score', 0) < 5:
-                        print("passing on entries not that important", analysis_results)
-                        continue
+                    print("analysis")
+                    if analysis_results.get('analysis'):
+                        analysis_results = analysis_results.get('analysis')
                         
                     # we want to skip entries that do not have high enough score
                 send_to_discord(ticker, analysis_results, filing_url)
