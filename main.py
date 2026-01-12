@@ -106,6 +106,9 @@ def analyze_with_gemini(row, document_text):
                     print(f"⚠️ Rate limit hit on {model_id}. Switching to next model...")
                     time.sleep(2) # Brief pause before trying next model
                     continue
+                elif "503" in error_msg or "overloaded" in error_msg:
+                    print(f"⚠️ Model Overloaded on {model_id}. Switching to next model...")
+                    time.sleep(2) # Brief pause before trying next model
                 else:
                     return f"Critical Error with {model_id}: {e}"
     except Exception as e:
