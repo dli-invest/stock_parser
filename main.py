@@ -193,7 +193,7 @@ def get_ticker_filings(
         proxy_auth = f'{proxy_username}:{proxy_password}_{proxy_settings}'
         proxies = {
             'http': f'http://{proxy_auth}@{proxy}',
-            'https': f'http://{proxy_auth}@{proxy}'
+            'https': f'https://{proxy_auth}@{proxy}'
         }
         r = requests.post(
             url,
@@ -214,7 +214,9 @@ def get_ticker_filings(
     except KeyError as _e:
         print(_e, symbol)
         pass
-
+    except Exception as e:
+        print("failed to work with proxies")
+    print("trying to find without proxies")
     r = requests.post(
         url,
         data=json.dumps(payload),
