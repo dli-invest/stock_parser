@@ -188,6 +188,7 @@ def get_ticker_filings(
         proxy = 'geo.iproyal.com:12321'
         proxy_username = os.getenv('IPROYAL_USERNAME')
         proxy_password = os.getenv('IPROYAL_PASSWORD')
+        rand_session = get_random_session_id()
         proxy_settings = f"country-ca_city-vancouver_session-{rand_session}_lifetime-30m"
         proxy_auth = f'{proxy_username}:{proxy_password}_{proxy_settings}'
         proxies = {
