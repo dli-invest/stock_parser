@@ -5,6 +5,7 @@ import re
 import os
 import pandas as pd
 import numpy as np
+import re
 from google import genai
 from google.genai import types
 from pypdf import PdfReader
@@ -767,6 +768,7 @@ if __name__ == "__main__":
         # entries = df_final_report.head()
         # for idx, row in df_final_report.iterrows():
         report_data = []
+        importance_score_pattern = r"Importance Score[:;]?\s*(\d+)/(\d+)"
         for idx, row in df_final_report.iterrows():
             print("using gemini to scan through entries")
             ticker = row['Ticker']
@@ -781,8 +783,20 @@ if __name__ == "__main__":
                     print("analysis")
                     if analysis_results.get('analysis'):
                         analysis_results = analysis_results.get('analysis')
-                        
                     # we want to skip entries that do not have high enough score
+                importance_match = re.search(importance_score_pattern, analysis_results)
+                if importance_match:
+                    score = importance_match.group(1)
+                    total = importance_match.group(2)
+                    try:
+                        percent = (int(score) / int(total)) * 100 if int(total) > 0 else 0
+                        if percent < 50:
+                            print("Percent is lower than 50 percent skipping news for", ticker)
+                            continue
+                    except Exception as e:
+                        print(e)
+                else:
+                    print("no importance score")
                 send_to_discord(ticker, analysis_results, filing_url)
                 report_data.append(analysis_results)
             else:
