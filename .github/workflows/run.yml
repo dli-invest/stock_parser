@@ -14,6 +14,9 @@ on:
       branches:
         - main
 
+env:
+  IPROYAL_USERNAME: ${{ secrets.IPROYAL_USERNAME }}
+  IPROYAL_PASSWORD: ${{ secrets.IPROYAL_PASSWORD }}
 # A sequence of jobs to run
 jobs:
   run-data-fetch:
