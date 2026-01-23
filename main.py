@@ -768,7 +768,10 @@ if __name__ == "__main__":
         # entries = df_final_report.head()
         # for idx, row in df_final_report.iterrows():
         report_data = []
-        importance_score_pattern = r"Importance Score[:;]?\s*(\d+)/(\d+)"
+        importance_patterns = [
+            r"Importance Score[:;]?\s*(\d+)/(\d+)",  # Matches "9/10"
+            r"Importance Score[:;]?\s*(\d+)"          # Matches "9" or "Score: 9"
+        ]
         for idx, row in df_final_report.iterrows():
             print("using gemini to scan through entries")
             ticker = row['Ticker']
@@ -784,19 +787,44 @@ if __name__ == "__main__":
                     if analysis_results.get('analysis'):
                         analysis_results = analysis_results.get('analysis')
                     # we want to skip entries that do not have high enough score
-                importance_match = re.search(importance_score_pattern, analysis_results)
-                if importance_match:
-                    score = importance_match.group(1)
-                    total = importance_match.group(2)
-                    try:
-                        percent = (int(score) / int(total)) * 100 if int(total) > 0 else 0
-                        if percent < 50:
-                            print("Percent is lower than 50 percent skipping news for", ticker)
-                            continue
-                    except Exception as e:
-                        print(e)
-                else:
-                    print("no importance score")
+                try:
+                    found_match = False
+                    score_val = 0
+                    is_percentage = False
+
+                    for pattern in patterns:
+                        match = re.search(pattern, analysis_results)
+                        if match:
+                            groups = match.groups()
+                            if len(groups) == 2:  # Found a fraction (e.g., 9/10)
+                                score = int(groups[0])
+                                total = int(groups[1])
+                                score_val = (score / total) * 100 if total > 0 else 0
+                                is_percentage = True
+                            else:  # Found a single number (e.g., 9)
+                                score_val = int(groups[0])
+                                is_percentage = False
+                            
+                            found_match = True
+                            break 
+
+                    if found_match:
+                        # Logic: If it was a fraction, check for 50%. If a single number, check if > 5.
+                        if is_percentage:
+                            if score_val < 50:
+                                print(f"Score {score_val}% is too low for {ticker}. Skipping.")
+                                continue
+                        else:
+                            if score_val <= 5:
+                                print(f"Score {score_val} is not greater than 5 for {ticker}. Skipping.")
+                                continue
+                        
+                        print(f"Valid score found: {score_val} for {ticker}")
+                    else:
+                        print(f"No importance score found for {ticker}")
+                except Exception as e:
+                    print(e)
+
                 send_to_discord(ticker, analysis_results, filing_url)
                 report_data.append(analysis_results)
             else:
