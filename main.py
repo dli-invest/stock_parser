@@ -3,6 +3,8 @@ import json
 import time
 import re
 import os
+import random
+import string
 import pandas as pd
 import numpy as np
 import re
@@ -156,6 +158,9 @@ def extract_text_from_pdf(pdf_path):
         return text
     except Exception as e:
         return f"Error extracting text: {e}"
+    
+def get_random_session_id(length=8):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
 def get_ticker_filings(
     symbol: str,
@@ -192,7 +197,7 @@ def get_ticker_filings(
         r = requests.post(
             url,
             data=json.dumps(payload),
-            proxies=proxy,
+            proxies=proxies,
             headers={
                 "authority": "app-money.tmx.com",
                 "referer": f"https://money.tmx.com/en/quote/{symbol.upper()}",
