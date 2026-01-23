@@ -239,6 +239,9 @@ def get_ticker_filings(
     except KeyError as _e:
         print(_e, symbol)
         pass
+    except Exception as _e:
+        print(_e, symbol)
+        pass
 
 def analyze_recent_filings(df_tickers: DataFrame, days_back: int = 2):
     """
