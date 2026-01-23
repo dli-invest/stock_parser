@@ -792,7 +792,7 @@ if __name__ == "__main__":
                     score_val = 0
                     is_percentage = False
 
-                    for pattern in patterns:
+                    for pattern in importance_patterns:
                         match = re.search(pattern, analysis_results)
                         if match:
                             groups = match.groups()
