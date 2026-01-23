@@ -5,6 +5,7 @@ import re
 import os
 import random
 import string
+import typst
 import pandas as pd
 import numpy as np
 import re
