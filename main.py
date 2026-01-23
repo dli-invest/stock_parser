@@ -59,6 +59,32 @@ def send_to_discord(ticker, analysis_text, filing_url):
     except Exception as e:
         print(f"Failed to send Discord notification: {e}")
 
+def send_pdf_to_discord(file_path):
+    """Sends a PDF report to a Discord channel via Webhook."""
+    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "YOUR_WEBHOOK_URL":
+        print("Warning: Discord Webhook URL not set. Skipping PDF upload.")
+        return
+
+    try:
+        with open(file_path, "rb") as f:
+            # Prepare the file and the optional text payload
+            files = {
+                "file": (f"Report.pdf", f, "application/pdf")
+            }
+            payload = {
+                "content": f"📄 **New Report Available:** analysis attached below."
+            }
+
+            # Use 'files' for the PDF and 'data' for the text content
+            response = requests.post(DISCORD_WEBHOOK_URL, data=payload, files=files)
+            response.raise_for_status()
+            
+        print(f"Successfully uploaded PDF to Discord.")
+    except FileNotFoundError:
+        print(f"Error: The file at {file_path} was not found.")
+    except Exception as e:
+        print(f"Failed to send PDF to Discord: {e}")
+
 def analyze_with_gemini(row, document_text):
     # Prepare the context from the dataframe row
     ticker = row.get('Ticker', 'Unknown')
@@ -791,7 +817,7 @@ if __name__ == "__main__":
                     found_match = False
                     score_val = 0
                     is_percentage = False
-
+                    skip_sending = False
                     for pattern in importance_patterns:
                         match = re.search(pattern, analysis_results)
                         if match:
@@ -813,10 +839,12 @@ if __name__ == "__main__":
                         if is_percentage:
                             if score_val < 50:
                                 print(f"Score {score_val}% is too low for {ticker}. Skipping.")
+                                skip_sending = True
                                 continue
                         else:
                             if score_val <= 5:
                                 print(f"Score {score_val} is not greater than 5 for {ticker}. Skipping.")
+                                skip_sending = True
                                 continue
                         
                         print(f"Valid score found: {score_val} for {ticker}")
@@ -824,7 +852,9 @@ if __name__ == "__main__":
                         print(f"No importance score found for {ticker}")
                 except Exception as e:
                     print(e)
-
+                if skip_sending:
+                    print("Not sending discord notification for ticker", ticker)
+                    continue
                 send_to_discord(ticker, analysis_results, filing_url)
                 report_data.append(analysis_results)
             else:
@@ -872,6 +902,12 @@ if __name__ == "__main__":
                     print(f"Critical Error with {model_id}: {e}")
     
         print("All models failed or were rate-limited.")
+
+        import json
+        sys_inputs = {"summaries": json.dumps(report_data)}
+
+        typst.compile(input="main.typ", output="report.pdf", sys_inputs=sys_inputs)
+        send_pdf_to_discord("report.pdf")
     else:
         print("\nNo companies in your filtered universe filed documents today.")
 
