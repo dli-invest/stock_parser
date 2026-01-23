@@ -137,9 +137,14 @@ def analyze_with_gemini(row, document_text):
                     print(f"⚠️ Model Overloaded on {model_id}. Switching to next model...")
                     time.sleep(2) # Brief pause before trying next model
                 else:
-                    return f"Critical Error with {model_id}: {e}"
+                    print("critical error", e)
+                    continue
     except Exception as e:
-        return f"Gemini Analysis Error: {e}"
+        print("Failed to return analysis")
+        return {
+                "model_used": "none",
+                "analysis": ""
+            }
 
 def extract_text_from_pdf(pdf_path):
     """Helper to extract text from a PDF file."""
@@ -809,7 +814,6 @@ if __name__ == "__main__":
                 analysis_results = analyze_with_gemini(row, content)
                 # check if analysis_results is a dict, if so extract
                 if type(analysis_results) == dict:
-                    print("analysis")
                     if analysis_results.get('analysis'):
                         analysis_results = analysis_results.get('analysis')
                     # we want to skip entries that do not have high enough score
