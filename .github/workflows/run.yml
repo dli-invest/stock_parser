@@ -71,8 +71,14 @@ jobs:
           name: filtered-tickers-list
           path: filtered.csv
 
-      - name: Upload Intermediate Tickers Artifact
+      - name: Upload Report 
         uses: actions/upload-artifact@v4
         with:
           name: report.pdf
           path: report.pdf
+
+      - name: Upload json file
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated_file.json
+          path: updated_file.json

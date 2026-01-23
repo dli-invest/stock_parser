@@ -910,6 +910,12 @@ if __name__ == "__main__":
 
             # assuming 20 rpm, so wait 5 seconds per entry
             time.sleep(10)
+
+        try:
+            with open("updated_file.json", "w") as f:
+                f.write(json.dumps(report_data))
+        except Exception as e:
+            print(e)
         # use another query to 
         prompt = f"""
             You are a professional Canadian equity analyst. Look at the following stock summaries and provide information on the best news.
