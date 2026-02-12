@@ -23,9 +23,10 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
 models_to_try = [
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
+    'gemini-2.5-pro'
     "gemini-3-flash-preview", 
     "gemma-3-4b-it",
-    'gemma-3-12b'
+    'gemma-3-12b-it'
 ]
 
 def configure_genai():
@@ -844,7 +845,8 @@ if __name__ == "__main__":
         report_data = []
         importance_patterns = [
             r"Importance Score[:;]?\s*(\d+)/(\d+)",  # Matches "9/10"
-            r"Importance Score[:;]?\s*(\d+)"          # Matches "9" or "Score: 9"
+            r"Importance Score[:;]?\s*(\d+)",          # Matches "9" or "Score: 9"
+            r"Importance Score[:;]?\s*(\d+)(?:/(\d+))?"
         ]
         for idx, row in df_final_report.iterrows():
             print("using gemini to scan through entries")
@@ -884,13 +886,13 @@ if __name__ == "__main__":
                     if found_match:
                         # Logic: If it was a fraction, check for 50%. If a single number, check if > 5.
                         if is_percentage:
-                            if score_val < 50:
+                            if score_val < 60:
                                 print(f"Score {score_val}% is too low for {ticker}. Skipping.")
                                 skip_sending = True
                                 continue
                         else:
-                            if score_val <= 5:
-                                print(f"Score {score_val} is not greater than 5 for {ticker}. Skipping.")
+                            if score_val <= 6:
+                                print(f"Score {score_val} is not greater than 6 for {ticker}. Skipping.")
                                 skip_sending = True
                                 continue
                         
