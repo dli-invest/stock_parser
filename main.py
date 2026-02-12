@@ -804,7 +804,7 @@ if __name__ == "__main__":
         {"type": "numeric", "column_key": "Market Cap", "operator": ">=", "threshold": 1e7},
         
         # Numeric Filter: Market Cap < 300 million
-        {"type": "numeric", "column_key": "Market Cap", "operator": "<", "threshold": 1e9}, 
+        {"type": "numeric", "column_key": "Market Cap", "operator": "<", "threshold": 7e8}, 
         
         # Categorical Filter: EXCLUDE companies in Mining and Oil & Gas sectors
         # {"type": "categorical", 
@@ -961,7 +961,7 @@ if __name__ == "__main__":
         import json
         sys_inputs = {"summaries": json.dumps(report_data)}
 
-        typst.compile(input="main.typ", output="report.pdf", sys_inputs=sys_inputs)
+        typst.compile(input="report.typ", output="report.pdf", sys_inputs=sys_inputs)
         send_pdf_to_discord("report.pdf")
     else:
         print("\nNo companies in your filtered universe filed documents today.")
