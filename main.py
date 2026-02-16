@@ -27,7 +27,8 @@ models_to_try = [
     "gemini-3-flash-preview", 
     "gemma-3-4b-it",
     'gemma-3-12b-it',
-    'gemma-3-27b-it'
+    'gemma-3-27b-it',
+    'gemma-3-2b-it',
 ]
 
 def configure_genai():
@@ -424,11 +425,11 @@ def identify_tickers_with_new_filings(df_tickers: pd.DataFrame) -> pd.DataFrame:
                 })
         
         # Optional: Add a tiny sleep to avoid rate limiting during the scan
-        time.sleep(0.1)
+        time.sleep(0.05)
 
     return pd.DataFrame(active_filers)
 
-def fetch_data_for_active_tickers(df_active: pd.DataFrame, delay: float = 0.5) -> pd.DataFrame:
+def fetch_data_for_active_tickers(df_active: pd.DataFrame, delay: float = 0.1) -> pd.DataFrame:
     """
     Fetches detailed financial data only for the tickers provided in the input DataFrame.
     """
@@ -912,7 +913,7 @@ if __name__ == "__main__":
                 send_to_discord(ticker, f"Skipping {ticker} due to download failure.", filing_url)
 
             # assuming 20 rpm, so wait 5 seconds per entry
-            time.sleep(10)
+            time.sleep(1)
 
         try:
             with open("updated_file.json", "w") as f:
