@@ -23,10 +23,11 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
 models_to_try = [
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
-    'gemini-2.5-pro'
+    'gemini-2.5-pro',
     "gemini-3-flash-preview", 
     "gemma-3-4b-it",
-    'gemma-3-12b-it'
+    'gemma-3-12b-it',
+    'gemma-3-27b-it'
 ]
 
 def configure_genai():
@@ -166,7 +167,7 @@ def get_random_session_id(length=8):
 
 def get_ticker_filings(
     symbol: str,
-    fromDate: str = datetime.today().replace(day=1).strftime("%Y-%m-%d"),
+    fromDate: str = datetime.today().strftime("%Y-%m-%d"),
     toDate: str = datetime.today().strftime("%Y-%m-%d"),
     limit: int = 100,
 ) -> Union[dict, None]:
