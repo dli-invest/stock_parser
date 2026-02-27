@@ -139,7 +139,8 @@ def analyze_with_gemini(row, document_text):
     """
     client = configure_genai()
     try:
-        for model_id in models_to_try:
+        models_to_use = get_available_models()
+        for model_id in models_to_use:
             try:
                 print(f"Attempting analysis with {model_id}...")
                 
@@ -153,6 +154,8 @@ def analyze_with_gemini(row, document_text):
                         # response_schema=FilingAnalysis,
                     )
                 )
+                # Success! Reset consecutive errors for this model
+                model_error_counts[model_id] = 0
                 
                 # Success! Return the text
                 return {
@@ -162,6 +165,9 @@ def analyze_with_gemini(row, document_text):
 
             except Exception as e:
                 error_msg = str(e)
+                # Increment consecutive errors for this model
+                model_error_counts[model_id] += 1
+                current_errors = model_error_counts[model_id]
                 if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
                     print(f"⚠️ Rate limit hit on {model_id}. Switching to next model...")
                     time.sleep(0.25) # Brief pause before trying next model
@@ -977,8 +983,8 @@ if __name__ == "__main__":
         """
 
         client = configure_genai()
-    
-        for model_id in models_to_try:
+        models_to_use = get_available_models()
+        for model_id in models_to_use:
             try:
                 print(f"Attempting analysis with {model_id}...")
                 
@@ -997,11 +1003,18 @@ if __name__ == "__main__":
     
             except Exception as e:
                 error_msg = str(e)
-                # Fix 3: Logic to catch 429 and iterate to the next model
+                # Fix 3: Logic to catch 429 and iterate to the next model.
+                # Increment consecutive errors for this model
+                model_error_counts[model_id] += 1
+                current_errors = model_error_counts[model_id]
                 if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
                     print(f"⚠️ Rate limit hit on {model_id}. Switching to next model...")
                     time.sleep(1) 
                     continue 
+                elif "503" in error_msg or "overloaded" in error_msg:
+                    print(f"⚠️ Model Overloaded on {model_id} (Failures: {current_errors}). Switching to next model...")
+                    time.sleep(0.5)
+                    continue
                 else:
                     print(f"Critical Error with {model_id}: {e}")
     
