@@ -277,11 +277,30 @@ def analyze_recent_filings(df_tickers: DataFrame, days_back: int = 2):
             doc_url = filing.get('urlToPdf')
             doc_name = filing.get('description', 'Untitled')
             f_date = filing.get('filingDate')
+            # grab description, if description or name is Notice of the meeting and record date skip it
             
             if not doc_url:
                 continue
-
+            filing_name = filing.get('name', '')
             print(f"  [!] Found: {doc_name} ({f_date})")
+
+            check_text = f"{doc_name} {filing_name}".lower()
+    
+            unimportant_phrases =[
+                "notice of the meeting",
+                "notice of meeting",
+                "record date",
+                "certification of annual filings",
+                "annual certificates",
+                'Participation fee form',
+                'Preliminary short form prospectus',
+                'Qualification certificate',
+                'Shelf prospectus'
+            ]
+
+            if any(phrase in check_text for phrase in unimportant_phrases):
+                print(f"  [-] Skipping unimportant filing: {doc_name} | {filing_name} ({f_date})")
+                continue
 
             # if f_date is today then proceed
             
@@ -304,6 +323,7 @@ def analyze_recent_filings(df_tickers: DataFrame, days_back: int = 2):
                 "Date": f_date,
                 "Document": doc_name,
                 "Impact": impact_score,
+                'Url': doc_url,
                 "Snippet": content[:200].replace("\n", " ") + "..."
             })
 
