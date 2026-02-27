@@ -28,8 +28,35 @@ models_to_try = [
     "gemma-3-4b-it",
     'gemma-3-12b-it',
     'gemma-3-27b-it',
+    'gemma-3-1b-it',
     'gemma-3-2b-it',
 ]
+
+# Track consecutive failures across the entire execution
+model_error_counts = {model: 0 for model in models_to_try}
+
+def get_error_tolerance(model_id: str) -> int:
+    """Returns the maximum allowed consecutive errors before a model is sidelined."""
+    if "gemini" in model_id.lower():
+        return 10  # Gemini has strict rate limits, lower tolerance
+    elif "gemma" in model_id.lower():
+        return 50  # Gemma has higher tolerance
+    return 5
+
+def get_available_models() -> list:
+    """Returns models that haven't exceeded their error tolerance. Guarantees at least 1."""
+    available = [
+        model for model in models_to_try 
+        if model_error_counts[model] < get_error_tolerance(model)
+    ]
+    
+    # Guarantee at least one model remains by returning the one with the lowest error count
+    if not available:
+        best_fallback = min(model_error_counts, key=model_error_counts.get)
+        print(f"⚠️ All models exceeded thresholds. Falling back to least-error model: {best_fallback}")
+        return [best_fallback]
+        
+    return available
 
 def configure_genai():
     """Initializes and validates the Gemini configuration."""

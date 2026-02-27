@@ -9,7 +9,7 @@ on:
   schedule:
     # This example uses cron syntax for Monday at 8:00 AM UTC
     # You might need to adjust the timing to ensure the listing file is updated
-    - cron: '10 21 * * 1-5' 
+    - cron: '10 14,21 * * 1-5' 
   push:
       branches:
         - main
@@ -90,5 +90,5 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: updated_file.json
-          path: updated_file.json
+          name: scraped_data.json
+          path: scraped_data.json
