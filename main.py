@@ -137,11 +137,11 @@ def analyze_with_gemini(row, document_text):
                 error_msg = str(e)
                 if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
                     print(f"⚠️ Rate limit hit on {model_id}. Switching to next model...")
-                    time.sleep(2) # Brief pause before trying next model
+                    time.sleep(0.25) # Brief pause before trying next model
                     continue
                 elif "503" in error_msg or "overloaded" in error_msg:
                     print(f"⚠️ Model Overloaded on {model_id}. Switching to next model...")
-                    time.sleep(2) # Brief pause before trying next model
+                    time.sleep(0.5) # Brief pause before trying next model
                 else:
                     print("critical error", e)
                     continue
@@ -916,7 +916,7 @@ if __name__ == "__main__":
             time.sleep(1)
 
         try:
-            with open("updated_file.json", "w") as f:
+            with open("scraped_data.json", "w") as f:
                 f.write(json.dumps(report_data))
         except Exception as e:
             print(e)
@@ -953,7 +953,7 @@ if __name__ == "__main__":
                 # Fix 3: Logic to catch 429 and iterate to the next model
                 if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
                     print(f"⚠️ Rate limit hit on {model_id}. Switching to next model...")
-                    time.sleep(2) 
+                    time.sleep(1) 
                     continue 
                 else:
                     print(f"Critical Error with {model_id}: {e}")

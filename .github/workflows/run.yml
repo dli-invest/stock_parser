@@ -56,6 +56,7 @@ jobs:
       # 6. Upload the final filtered data file as an artifact
       - name: Upload Final Data Artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: final-ticker-data
           path: active_filings_with_financials.csv
@@ -68,11 +69,13 @@ jobs:
       # 7. Upload the intermediate ticker list file as an artifact
       - name: Upload Intermediate Tickers Artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: filtered-tickers-list
           path: filtered.csv
 
       - name: Upload Report 
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: report.pdf
@@ -80,6 +83,7 @@ jobs:
 
       - name: Upload json file
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: updated_file.json
           path: updated_file.json
