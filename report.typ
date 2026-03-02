@@ -12,11 +12,11 @@
 #outline(
   title: "Impacted Stock Tickers",
   depth: 1,
-  indent: true
+  indent: auto // <--- Fix: Changed from `true` to `auto`
 )
 
 #let summaries = json(bytes(sys.inputs.summaries))
-#for summary in summaries[
+#for summary in summaries [
   // Creates a Heading (which populates the ToC)
   = #summary.ticker 
   

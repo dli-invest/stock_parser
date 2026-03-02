@@ -993,8 +993,10 @@ if __name__ == "__main__":
 
         import json
         sys_inputs = {"summaries": json.dumps(report_data)}
-
-        typst.compile(input="report.typ", output="report.pdf", sys_inputs=sys_inputs)
+        try:
+            typst.compile(input="report.typ", output="report.pdf", sys_inputs=sys_inputs)
+        except Exception as e:
+            print("testing failure", e)
         send_pdf_to_discord("report.pdf")
     else:
         print("\nNo companies in your filtered universe filed documents today.")
