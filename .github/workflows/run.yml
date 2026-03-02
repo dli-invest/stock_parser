@@ -70,7 +70,7 @@ jobs:
         with:
           name: filings
           path: filing_downloads
-        retention-days: 5
+          retention-days: 2
       # 7. Upload the intermediate ticker list file as an artifact
       - name: Upload Intermediate Tickers Artifact
         uses: actions/upload-artifact@v4
