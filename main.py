@@ -928,7 +928,10 @@ if __name__ == "__main__":
                     print("Not sending discord notification for ticker", ticker)
                     continue
                 send_to_discord(ticker, analysis_results, filing_url)
-                report_data.append(analysis_results)
+                report_data.append({
+                     "ticker": ticker,
+                     "text": analysis_results
+                })
             else:
                 print(f"Skipping {ticker} due to download failure.")
                 send_to_discord(ticker, f"Skipping {ticker} due to download failure.", filing_url)
