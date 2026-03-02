@@ -59,6 +59,7 @@ jobs:
         with:
           name: final-ticker-data
           path: active_filings_with_financials.csv
+          retention-days: 2
           # Optional: Add other resulting files like 'non_etf_tickers.csv' if needed
           # path: |
           #   final_ticker_data_flattened.csv
@@ -78,6 +79,7 @@ jobs:
         with:
           name: filtered-tickers-list
           path: filtered.csv
+          retention-days: 2
 
       - name: Upload Report 
         if: always()
@@ -85,15 +87,20 @@ jobs:
         with:
           name: report.pdf
           path: report.pdf
+          retention-days: 2
+
       - name: News File
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: filings_analysis_report.csv
           path: filings_analysis_report.csv
+          retention-days: 2
+
       - name: Upload json file
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: scraped_data.json
           path: scraped_data.json
+          retention-days: 2
