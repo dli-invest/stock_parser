@@ -221,38 +221,6 @@ def get_ticker_filings(
     payload["variables"]["limit"] = limit
     url = "https://app-money.tmx.com/graphql"
 
-    try:
-        proxy = 'geo.iproyal.com:12321'
-        proxy_username = os.getenv('IPROYAL_USERNAME')
-        proxy_password = os.getenv('IPROYAL_PASSWORD')
-        rand_session = get_random_session_id()
-        proxy_settings = f"country-ca_city-vancouver_session-{rand_session}_lifetime-30m"
-        proxy_auth = f'{proxy_username}:{proxy_password}_{proxy_settings}'
-        proxies = {
-            'http': f'http://{proxy_auth}@{proxy}',
-            'https': f'https://{proxy_auth}@{proxy}'
-        }
-        r = requests.post(
-            url,
-            data=json.dumps(payload),
-            proxies=proxies,
-            headers={
-                "authority": "app-money.tmx.com",
-                "referer": f"https://money.tmx.com/en/quote/{symbol.upper()}",
-                "locale": "en",
-                "Content-Type": "application/json",
-                # "User-Agent": get_random_agent(),
-                "Accept": "*/*"
-            },
-        )
-        allData = r.json()
-        data = allData["data"]
-        return data
-    except KeyError as _e:
-        print(_e, symbol)
-        pass
-    except Exception as e:
-        print("failed to work with proxies")
     print("trying to find without proxies")
     r = requests.post(
         url,

@@ -12,8 +12,7 @@ on:
     - cron: '10 14,21 * * 1-5' 
   push:
       branches:
-        - main
-
+        - release/testing-changes
 env:
   IPROYAL_USERNAME: ${{ secrets.IPROYAL_USERNAME }}
   IPROYAL_PASSWORD: ${{ secrets.IPROYAL_PASSWORD }}
