@@ -944,11 +944,15 @@ if __name__ == "__main__":
                 f.write(json.dumps(report_data))
         except Exception as e:
             print(e)
+
+        report_summaries = [f"{item['text']}" for item in report_data]
+        # 2. Join the list of strings into one large block of text
+        report_text_block = "\n\n---\n\n".join(report_summaries)
         # use another query to 
         prompt = f"""
             You are a professional Canadian equity analyst. Look at the following stock summaries and provide information on the best news.
             
-            {"\n".join(report_data)}
+            {report_summaries}
             
             TASK: Return the top 5 tickers based on news quality and potential upside.
         """
