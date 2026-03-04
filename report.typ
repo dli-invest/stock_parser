@@ -1,5 +1,5 @@
 #import "@preview/biz-report:0.2.0": authorwrap, dropcappara, infobox, report  
-
+#import "@preview/cmarker:0.1.8"
 #show: report.with(
   title: "Business Report",
   publishdate: "November 2025",
@@ -21,7 +21,7 @@
   = #summary.ticker 
   
   // Renders the Gemini summary text
-  #summary.text
+  #cmarker.render(summary.text)
   
   #v(1.5em) // Adds vertical spacing between entries
 ]
