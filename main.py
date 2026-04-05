@@ -138,6 +138,7 @@ def analyze_with_gemini(row, document_text):
     1. Summarize the core news in 2 sentences.
     2. Identify specific financial or share structure changes.
     3. Assign an importance_score from 1-10 (10 being a major merger/acquisition or massive earnings beat, or massive developments in the company).
+    4. Keep the analysis short and to the point.
     """
     client = configure_genai()
     try:
