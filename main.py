@@ -873,7 +873,8 @@ if __name__ == "__main__":
 
     if file_tsx_tsxv is None:
         print("CRITICAL: Could not download the TSX Excel file. Script stopping.")
-        file_tsx_tssv = "tsx-and-amp-tsxv-listed-companies-2026-08-14-en.xlsx"
+        file_tsx_tsxv = "tsx-and-amp-tsxv-listed-companies-2026-08-14-en.xlsx"
+        print("swapping to file_tsx_tsxv", file_tsx_tsxv)
     ticker_col_name_actual = 'Root\nTicker' 
     output_csv_file = 'non_etf_tickers.csv'
 
