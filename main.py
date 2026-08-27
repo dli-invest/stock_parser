@@ -444,40 +444,22 @@ def get_ticker_data(symbol=str) -> Union[dict, None]:
         pass
 
 
-def download_file(url, download_directory='filings_download', output_filename=None):
-    try:
+def download_file(url, output_filename=None):
+    # Try up to 3 times with different proxies
+    for _ in range(3):
         params = get_request_params()
-        # Send a GET request to the URL
-        response = requests.get(url, stream=True, **params)
-        
-        # Check if the request was successful (Status Code 200)
-        if response.status_code == 200:
-            
-            # If no filename is provided, try to find it in the Content-Disposition header
-            if not output_filename:
-                if "Content-Disposition" in response.headers:
-                    content_disposition = response.headers["Content-Disposition"]
-                    filename_match = re.findall('filename="?([^"]+)"?', content_disposition)
-                    if filename_match:
-                        output_filename = filename_match[0]
-            
-            # Fallback filename if one couldn't be determined
-            if not output_filename:
-                output_filename = "downloaded_file.pdf"
-
-            # Write the content to a file in chunks (good for large files)
-            with open(output_filename, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            print(f"Success: File downloaded as '{output_filename}'")
-        else:
-            print(f"Error: Failed to download. Status code: {response.status_code}")
-
-        return output_filename
-            
-    except Exception as e:
-        print(f"An error occurred: {e}")
+        try:
+            response = requests.get(url, stream=True, **params)
+            if response.status_code == 200:
+                if not output_filename:
+                    output_filename = "downloaded_" + get_random_session_id(5) + ".pdf"
+                with open(output_filename, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                return output_filename
+        except Exception as e:
+            print(f"Proxy failure for download, retrying...")
+    return None
 
 def identify_tickers_with_new_filings(df_tickers: pd.DataFrame) -> pd.DataFrame:
     """
