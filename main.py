@@ -22,7 +22,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GEMINI_API_KEY")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
 models_to_try = [
     "gemma-4-26b-a4b-it",  # Gemma 4 26B (Mixture of Experts)
-    "gemma-4-31b-it"       # Gemma 4 31B (Dense)
+    "gemma-4-31b-it",       # Gemma 4 31B (Dense)
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
     'gemini-2.5-pro',
