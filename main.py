@@ -807,218 +807,150 @@ def fetch_all_ticker_data(ticker_list_file: str, delay_seconds: float, final_dat
 
     return df_final
 
+# ... (Keep all your existing imports and helper functions above) ...
+
+def send_discord_alert(content, title="Alert"):
+    """Simple helper for text-only discord notifications to avoid repetitive payload boilerplate."""
+    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "YOUR_WEBHOOK_URL":
+        return
+    payload = {"embeds": [{"title": title, "description": content, "color": 15844367}]} # Gold color
+    try:
+        requests.post(DISCORD_WEBHOOK_URL, json=payload).raise_for_status()
+    except Exception as e:
+        print(f"Failed alert: {e}")
+
 if __name__ == "__main__":
+    # 1. Setup and Filter Tickers
     url = "https://www.tsx.com/en/resource/571"
     file_tsx_tsxv = download_file(url)
-    # file_tsx_tsxv ='tsx-and-amp-tsxv-listed-companies-2025-12-15-en.xlsx'
     ticker_col_name_actual = 'Root\nTicker' 
     output_csv_file = 'non_etf_tickers.csv'
 
-    # # Execute the function
     df_result = filter_exchange_listings(
         file_path=file_tsx_tsxv, 
         ticker_col_name=ticker_col_name_actual, 
         output_file=output_csv_file
     )
+
     new_filter_list = [
-        # Numeric Filter: Market Cap >= 30 million
         {"type": "numeric", "column_key": "Market Cap", "operator": ">=", "threshold": 1e7},
-        
-        # Numeric Filter: Market Cap < 300 million
         {"type": "numeric", "column_key": "Market Cap", "operator": "<", "threshold": 7e8}, 
-        
-        # Categorical Filter: EXCLUDE companies in Mining and Oil & Gas sectors
-        # {"type": "categorical", 
-        #  "column_key": "Sector", 
-        #  "operation": "exclude", 
-        #  "values": ["MINING"]
-        # },
-        
-        # Categorical Filter (Optional Example): INCLUDE only Technology and Financial Services sectors
-        # This will filter the results *after* the Market Cap and EXCLUDE filters
-        # {"type": "categorical",
-        #  "column_key": "Sector",
-        #  "operation": "include",
-        #  "values": ["TECHNOLOGY", "FINANCIAL SERVICES"]
-        # }
     ]
+    
     df_filtered = filter_tickers(
         file_path=output_csv_file, 
         filter_list=new_filter_list, 
         final_output_file='filtered.csv'
     )
 
+    # 2. IDENTIFY FILINGS
     df_active_filers = identify_tickers_with_new_filings(df_filtered)
 
-    if not df_active_filers.empty:
-        # 4. FETCH detailed financial data for ONLY those active tickers
+    # 3. IMMEDIATE NOTIFICATION LOGIC
+    if df_active_filers.empty:
+        print("\nNo companies filed documents today.")
+        send_discord_alert("📭 No new filings found today for the filtered universe.", "Daily Scan Complete")
+    else:
+        # Send the "Quick Release" list immediately
+        ticker_list_str = "\n".join([f"• **{row['Ticker']}**: {row['Filing_Title']}" for idx, row in df_active_filers.iterrows()])
+        initial_message = f"🚀 **{len(df_active_filers)} New Filings Detected!**\nStarting deep analysis now...\n\n{ticker_list_str}"
+        send_discord_alert(initial_message, "Real-Time Filing Alert")
+
+        # 4. FETCH detailed financial data
         df_final_report = fetch_data_for_active_tickers(df_active_filers, delay=0.5)
-        
-        # 5. Output Final Results
         df_final_report.to_csv("active_filings_with_financials.csv", index=False)
         
-        print("\n--- Final Report Ready ---")
-        print(f"Processed {len(df_final_report)} tickers with new filings.")
-        print(df_final_report[['Ticker', 'Filing_Title', 'Filing_URL']].head())
-        # entries
-        # entries = df_final_report.head()
-        # for idx, row in df_final_report.iterrows():
         report_data = []
         importance_patterns = [
-            r"Importance Score[:;]?\s*(\d+)/(\d+)",  # Matches "9/10"
-            r"Importance Score[:;]?\s*(\d+)",          # Matches "9" or "Score: 9"
+            r"Importance Score[:;]?\s*(\d+)/(\d+)",
+            r"Importance Score[:;]?\s*(\d+)",
             r"Importance Score[:;]?\s*(\d+)(?:/(\d+))?"
         ]
+
+        # 5. START GEMINI JOBS
         for idx, row in df_final_report.iterrows():
-            print("using gemini to scan through entries")
             ticker = row['Ticker']
             filing_url = row['Filing_URL']
-            # download the file in the list, extract the text, print that the text is extracted
+            
+            print(f"--- Processing AI Analysis for {ticker} ---")
             file_path = download_file(filing_url)
+            
             if file_path and os.path.exists(file_path):
                 content = extract_text_from_pdf(file_path)
                 analysis_results = analyze_with_gemini(row, content)
-                # check if analysis_results is a dict, if so extract
-                if type(analysis_results) == dict:
-                    if analysis_results.get('analysis'):
-                        analysis_results = analysis_results.get('analysis')
-                    # we want to skip entries that do not have high enough score
+                
+                # Extract text if dictionary
+                if isinstance(analysis_results, dict):
+                    analysis_text = analysis_results.get('analysis', "")
+                else:
+                    analysis_text = analysis_results
+
+                if not analysis_text:
+                    continue
+
+                # Scoring Logic
+                skip_sending = False
                 try:
                     found_match = False
                     score_val = 0
                     is_percentage = False
-                    skip_sending = False
+                    
                     for pattern in importance_patterns:
-                        match = re.search(pattern, analysis_results)
+                        match = re.search(pattern, analysis_text)
                         if match:
                             groups = match.groups()
-                            if len(groups) == 2:  # Found a fraction (e.g., 9/10)
-                                score = int(groups[0])
-                                total = int(groups[1])
-                                score_val = (score / total) * 100 if total > 0 else 0
+                            if groups[1]: # Fraction
+                                score_val = (int(groups[0]) / int(groups[1])) * 100
                                 is_percentage = True
-                            else:  # Found a single number (e.g., 9)
+                            else: # Single number
                                 score_val = int(groups[0])
-                                is_percentage = False
-                            
                             found_match = True
                             break 
 
                     if found_match:
-                        # Logic: If it was a fraction, check for 50%. If a single number, check if > 5.
-                        if is_percentage:
-                            if score_val < 60:
-                                print(f"Score {score_val}% is too low for {ticker}. Skipping.")
-                                skip_sending = True
-                                continue
-                        else:
-                            if score_val <= 6:
-                                print(f"Score {score_val} is not greater than 6 for {ticker}. Skipping.")
-                                skip_sending = True
-                                continue
-                        
-                        print(f"Valid score found: {score_val} for {ticker}")
-                    else:
-                        print(f"No importance score found for {ticker}")
+                        if (is_percentage and score_val < 60) or (not is_percentage and score_val <= 6):
+                            print(f"Score {score_val} too low for {ticker}. Skipping Discord notification.")
+                            skip_sending = True
                 except Exception as e:
-                    print(e)
-                if skip_sending:
-                    print("Not sending discord notification for ticker", ticker)
-                    continue
-                send_to_discord(ticker, analysis_results, filing_url)
-                report_data.append({
-                     "ticker": ticker,
-                     "text": analysis_results
-                })
+                    print(f"Scoring error: {e}")
+
+                if not skip_sending:
+                    send_to_discord(ticker, analysis_text, filing_url)
+                    report_data.append({"ticker": ticker, "text": analysis_text})
+                
+                os.remove(file_path) # Clean up downloaded PDF
             else:
-                print(f"Skipping {ticker} due to download failure.")
-                send_to_discord(ticker, f"Skipping {ticker} due to download failure.", filing_url)
+                send_to_discord(ticker, f"⚠️ Failed to download filing for manual review.", filing_url)
 
-            # assuming 20 rpm, so wait 5 seconds per entry
-            time.sleep(1)
+            time.sleep(2) # Prevent API rate limits
 
-        try:
+        # 6. FINAL SUMMARY & PDF GENERATION
+        if report_data:
             with open("scraped_data.json", "w") as f:
-                f.write(json.dumps(report_data))
-        except Exception as e:
-            print(e)
+                json.dump(report_data, f)
 
-        report_summaries = [f"{item['text']}" for item in report_data]
-        # 2. Join the list of strings into one large block of text
-        report_text_block = "\n\n---\n\n".join(report_summaries)
-        # use another query to 
-        prompt = f"""
-            You are a professional Canadian equity analyst. Look at the following stock summaries and provide information on the best news.
-            
-            {report_summaries}
-            
-            TASK: Return the top 5 tickers based on news quality and potential upside.
-        """
+            report_summaries = [f"Ticker: {item['ticker']}\n{item['text']}" for item in report_data]
+            summary_prompt = f"Summarize the top 5 most actionable opportunities from these reports:\n\n" + "\n\n".join(report_summaries)
 
-        client = configure_genai()
-        models_to_use = get_available_models()
-        for model_id in models_to_use:
-            try:
-                print(f"Attempting analysis with {model_id}...")
-                
-                response = client.models.generate_content(
-                    model=model_id,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=0.2,
-                    )
-                )
-                
-                analysis_results = response.text
-                print("analysis_results", analysis_results)
-                send_to_discord("summary", analysis_results, "https://github.com/dli-invest/stock_parser")
-                
-    
-            except Exception as e:
-                error_msg = str(e)
-                # Fix 3: Logic to catch 429 and iterate to the next model.
-                # Increment consecutive errors for this model
-                model_error_counts[model_id] += 1
-                current_errors = model_error_counts[model_id]
-                if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-                    print(f"⚠️ Rate limit hit on {model_id}. Switching to next model...")
-                    time.sleep(1) 
-                    continue 
-                elif "503" in error_msg or "overloaded" in error_msg:
-                    print(f"⚠️ Model Overloaded on {model_id} (Failures: {current_errors}). Switching to next model...")
-                    time.sleep(0.5)
+            client = configure_genai()
+            models_to_use = get_available_models()
+            
+            summary_generated = False
+            for model_id in models_to_use:
+                try:
+                    print(f"Generating final summary with {model_id}...")
+                    response = client.models.generate_content(model=model_id, contents=summary_prompt)
+                    send_to_discord("Daily High-Impact Summary", response.text, "https://github.com/dli-invest/stock_parser")
+                    summary_generated = True
+                    break
+                except Exception as e:
+                    print(f"Summary failed on {model_id}: {e}")
                     continue
-                else:
-                    print(f"Critical Error with {model_id}: {e}")
-    
-        print("All models failed or were rate-limited.")
 
-        import json
-        sys_inputs = {"summaries": json.dumps(report_data)}
-        try:
-            typst.compile(input="report.typ", output="report.pdf", sys_inputs=sys_inputs)
-        except Exception as e:
-            print("testing failure", e)
-        send_pdf_to_discord("report.pdf")
-    else:
-        print("\nNo companies in your filtered universe filed documents today.")
-
-    # API_DELAY_SECONDS = 0.5  
-    # final_output_all_data = 'final_ticker_data_flattened.csv'
-
-    # df_final_data = fetch_all_ticker_data(
-    #     ticker_list_file="filtered.csv", 
-    #     delay_seconds=API_DELAY_SECONDS, 
-    #     final_data_output=final_output_all_data
-    # )
-    # df_final_data = pd.read_csv(final_output_all_data)
-    # if not df_final_data.empty:
-    #     # 2. Run the Filings Analysis
-    #     analyze_recent_filings(df_final_data, days_back=0)
-    # else:
-    #     print("No tickers passed the filters; skipping filings analysis.")
-
-    # iterate through all the tickers, check for news in the past 3 days
-
-    # print all the filings
-    
+            # Generate PDF Report
+            try:
+                sys_inputs = {"summaries": json.dumps(report_data)}
+                typst.compile(input="report.typ", output="report.pdf", sys_inputs=sys_inputs)
+                send_pdf_to_discord("report.pdf")
+            except Exception as e:
+                print(f"Typst PDF failure: {e}")
