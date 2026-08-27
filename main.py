@@ -32,6 +32,70 @@ models_to_try = [
 # Track consecutive failures across the entire execution
 model_error_counts = {model: 0 for model in models_to_try}
 
+def mk_user_agent():
+    return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+
+# --- Your provided proxy functions ---
+def get_proxies_world(url="https://www.freeproxy.world/?type=http&anonymity=&country=CA&speed=&page=1"):
+    try:
+        response = requests.get(url, headers={'User-Agent': mk_user_agent()}, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.find('table', attrs={'class': 'layui-table'})
+        proxies = []
+        if not table: return []
+        for row in table.find_all('tr')[1:]:
+            cols = row.find_all('td')
+            if len(cols) >= 2 and cols[5].text.strip() == 'http':
+                proxies.append(f"http://{cols[0].text.strip()}:{cols[1].text.strip()}")
+        return proxies
+    except: return []
+
+def get_proxies_cz(url="http://free-proxy.cz/en/proxylist/country/CA/all/date/all/"):
+    try:
+        response = requests.get(url, headers={'User-Agent': mk_user_agent()}, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        pattern = re.compile(r'Base64\.decode\("([^"]+)"\)')
+        proxies = []
+        table = soup.find('table', attrs={'id': 'proxy_list'})
+        if not table: return []
+        for row in table.find_all('tr')[1:]:
+            cols = row.find_all('td')
+            if len(cols) > 1:
+                script_tag = cols[0].find('script')
+                if script_tag and script_tag.string:
+                    match = pattern.search(script_tag.string)
+                    if match:
+                        ip = base64.b64decode(match.group(1)).decode('utf-8')
+                        port = cols[1].text.strip()
+                        proxies.append(f'http://{ip}:{port}')
+        return proxies
+    except: return []
+
+def get_proxies_proxifly(url="https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/countries/CA/data.txt"):
+    try:
+        response = requests.get(url, timeout=10)
+        lines = response.text.splitlines()
+        return [l.strip() for l in lines if re.match(r'^(http|https|socks4|socks5):\/\/', l.strip())]
+    except: return []
+
+def get_proxy_list():
+    fetchers = [get_proxies_proxifly, get_proxies_cz, get_proxies_world]
+    for fetcher in fetchers:
+        proxies = fetcher()
+        if proxies: return proxies
+    return []
+
+# Initialize a global proxy pool
+PROXY_POOL = get_proxy_list()
+
+def get_request_params():
+    """Returns a random proxy dict if available, plus standard headers."""
+    params = {"headers": {"User-Agent": mk_user_agent()}, "timeout": 15}
+    if PROXY_POOL:
+        p = random.choice(PROXY_POOL)
+        params["proxies"] = {"http": p, "https": p}
+    return params
+
 def get_error_tolerance(model_id: str) -> int:
     """Returns the maximum allowed consecutive errors before a model is sidelined."""
     if "gemini" in model_id.lower():
@@ -382,11 +446,9 @@ def get_ticker_data(symbol=str) -> Union[dict, None]:
 
 def download_file(url, download_directory='filings_download', output_filename=None):
     try:
-         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-        }
+        params = get_request_params()
         # Send a GET request to the URL
-        response = requests.get(url, headers=headers, stream=True)
+        response = requests.get(url, stream=True, **params)
         
         # Check if the request was successful (Status Code 200)
         if response.status_code == 200:
