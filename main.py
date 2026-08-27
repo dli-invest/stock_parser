@@ -382,8 +382,11 @@ def get_ticker_data(symbol=str) -> Union[dict, None]:
 
 def download_file(url, download_directory='filings_download', output_filename=None):
     try:
+         headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+        }
         # Send a GET request to the URL
-        response = requests.get(url, stream=True)
+        response = requests.get(url, headers=headers, stream=True)
         
         # Check if the request was successful (Status Code 200)
         if response.status_code == 200:
@@ -823,6 +826,10 @@ if __name__ == "__main__":
     # 1. Setup and Filter Tickers
     url = "https://www.tsx.com/en/resource/571"
     file_tsx_tsxv = download_file(url)
+
+    if file_tsx_tsxv is None:
+        print("CRITICAL: Could not download the TSX Excel file. Script stopping.")
+        exit(1)
     ticker_col_name_actual = 'Root\nTicker' 
     output_csv_file = 'non_etf_tickers.csv'
 
