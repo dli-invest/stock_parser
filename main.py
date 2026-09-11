@@ -758,6 +758,166 @@ def filter_tickers(file_path: str, filter_list: list, final_output_file: str) ->
 
     return df_current
 
+import os
+import time
+import pandas as pd
+from typing import Optional, Dict
+from google import genai
+from google.genai import types
+import requests
+
+# ---------------- CONFIGURATION ----------------
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GEMINI_API_KEY")
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
+
+# You can use Gemma 4 or Gemini 2.5 Flash as primary/fallback models
+MODELS_TO_TRY = [
+    "gemma-4-26b-a4b-it",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+]
+
+def configure_genai() -> genai.Client:
+    """Initializes the Google GenAI Client."""
+    if not GOOGLE_API_KEY or GOOGLE_API_KEY == "YOUR_GEMINI_API_KEY":
+        raise ValueError("GOOGLE_API_KEY is missing or not set.")
+    return genai.Client(api_key=GOOGLE_API_KEY)
+
+# ---------------- DISCORD NOTIFICATION ----------------
+def send_to_discord(ticker: str, summary: str, sources: list = None):
+    """Sends the formatted analysis to Discord."""
+    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "YOUR_WEBHOOK_URL":
+        return
+
+    source_text = "\n".join([f"- [{s.get('title', 'Source')}]({s.get('url')})" for s in (sources or [])[:3])
+    
+    payload = {
+        "embeds": [{
+            "title": f"📢 Material News: {ticker}",
+            "description": summary,
+            "fields": [{"name": "Top Sources", "value": source_text}] if source_text else [],
+            "color": 3066993,  # Green
+            "footer": {"text": "Google Search Grounded Intelligence"}
+        }]
+    }
+    try:
+        requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+        print(f"✅ Sent alert to Discord for {ticker}")
+    except Exception as e:
+        print(f"Failed to send Discord alert for {ticker}: {e}")
+
+# ---------------- SEARCH & ANALYSIS FUNCTION ----------------
+def analyze_ticker_with_search(client: genai.Client, ticker: str, company_name: str = "") -> Optional[Dict]:
+    """
+    Uses Google Search Grounding to check for news/filings in the last 48 hours.
+    Returns None if no material news exists.
+    """
+    target = f"{ticker} ({company_name})" if company_name else ticker
+
+    prompt = f"""
+    Search for official news, press releases, regulatory filings (SEDAR+ / TSX), or major market updates 
+    for the Canadian listed company '{target}' that occurred in the last 48 hours.
+
+    CRITERIA:
+    1. If there is NO material news, acquisitions, earnings, financings, or major company updates in the last 48 hours, 
+       reply ONLY with the exact word: "NO_NEWS".
+    2. If there IS material news, provide a concise single-paragraph summary (3-4 sentences maximum):
+       - What happened (merger, earnings beat/miss, private placement, board change, etc.).
+       - The financial terms or key numbers involved.
+       - The immediate business significance.
+    """
+
+    for model_id in MODELS_TO_TRY:
+        try:
+            # Enable Search Grounding tool
+            response = client.models.generate_content(
+                model=model_id,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[{"google_search": {}}],  # Activates live web grounding
+                    temperature=0.2,
+                )
+            )
+
+            text_output = response.text.strip()
+            if "NO_NEWS" in text_output or len(text_output) < 15:
+                return None
+
+            # Extract source URLs from grounding metadata if available
+            sources = []
+            try:
+                metadata = response.candidates[0].grounding_metadata
+                if metadata and metadata.grounding_chunks:
+                    for chunk in metadata.grounding_chunks:
+                        if hasattr(chunk, 'web') and chunk.web:
+                            sources.append({
+                                "title": chunk.web.title or "Link",
+                                "url": chunk.web.uri
+                            })
+            except Exception:
+                pass
+
+            return {
+                "ticker": ticker,
+                "summary": text_output,
+                "sources": sources,
+                "model": model_id
+            }
+
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                print(f"Rate limit on {model_id}, falling back to next model...")
+                time.sleep(1.0)
+                continue
+            else:
+                print(f"Error on {model_id} for {ticker}: {e}")
+                continue
+
+    return None
+
+# ---------------- MAIN BATCH RUNNER ----------------
+def run_market_scan(df_filtered_tickers: pd.DataFrame, delay_between_calls: float = 0.5):
+    """
+    Iterates over filtered tickers, performs search-grounded checks, and posts updates.
+    """
+    client = configure_genai()
+    results = []
+
+    print(f"\n🔍 Scanning {len(df_filtered_tickers)} tickers for recent news via Google Search Grounding...")
+
+    for i, row in df_filtered_tickers.iterrows():
+        ticker = str(row.get("Ticker", "")).strip()
+        company_name = str(row.get("Name", row.get("Company", ""))).strip()
+
+        if not ticker:
+            continue
+
+        print(f"[{i+1}/{len(df_filtered_tickers)}] Searching news for {ticker}...")
+        res = analyze_ticker_with_search(client, ticker, company_name)
+
+        if res:
+            print(f"  🚨 News found for {ticker}!")
+            print(f"  Summary: {res['summary']}\n")
+            send_to_discord(res["ticker"], res["summary"], res.get("sources", []))
+            results.append({
+                "Ticker": ticker,
+                "News_Summary": res["summary"],
+                "Sources": ", ".join([s["url"] for s in res.get("sources", [])])
+            })
+        else:
+            print(f"  [-] No recent material news.")
+
+        time.sleep(delay_between_calls)
+
+    # Save findings
+    if results:
+        df_out = pd.DataFrame(results)
+        df_out.to_csv("daily_ticker_news_summary.csv", index=False)
+        print(f"\nScan complete. {len(results)} companies with material news logged to daily_ticker_news_summary.csv")
+    else:
+        print("\nScan complete. No recent material news found across tickers.")
+    
 def fetch_all_ticker_data(ticker_list_file: str, delay_seconds: float, final_data_output: str) -> pd.DataFrame:
     """
     Reads a list of tickers, fetches detailed data for each, and saves the complete
@@ -867,14 +1027,16 @@ def send_discord_alert(content, title="Alert"):
         print(f"Failed alert: {e}")
 
 if __name__ == "__main__":
-    # 1. Setup and Filter Tickers
+    # ---------------------------------------------------------
+    # 1. SETUP & FILTER TICKERS
+    # ---------------------------------------------------------
     url = "https://www.tsx.com/en/resource/571"
     file_tsx_tsxv = download_file(url)
 
     if file_tsx_tsxv is None:
-        print("CRITICAL: Could not download the TSX Excel file. Script stopping.")
+        print("CRITICAL: Could not download TSX Excel file. Using fallback.")
         file_tsx_tsxv = "tsx-and-amp-tsxv-listed-companies-2026-08-14-en.xlsx"
-        print("swapping to file_tsx_tsxv", file_tsx_tsxv)
+
     ticker_col_name_actual = 'Root\nTicker' 
     output_csv_file = 'non_etf_tickers.csv'
 
@@ -895,114 +1057,223 @@ if __name__ == "__main__":
         final_output_file='filtered.csv'
     )
 
-    # 2. IDENTIFY FILINGS
+    # ---------------------------------------------------------
+    # 2. IDENTIFY NEW FILINGS (Today Only)
+    # ---------------------------------------------------------
     df_active_filers = identify_tickers_with_new_filings(df_filtered)
 
-    # 3. IMMEDIATE NOTIFICATION LOGIC
+    # ---------------------------------------------------------
+    # 3. NOTIFICATION & MULTI-TICKER GOOGLE SEARCH
+    # ---------------------------------------------------------
     if df_active_filers.empty:
         print("\nNo companies filed documents today.")
         send_discord_alert("📭 No new filings found today for the filtered universe.", "Daily Scan Complete")
     else:
-        # Send the "Quick Release" list immediately
-        ticker_list_str = "\n".join([f"• **{row['Ticker']}**: {row['Filing_Title']}" for idx, row in df_active_filers.iterrows()])
-        initial_message = f"🚀 **{len(df_active_filers)} New Filings Detected!**\nStarting deep analysis now...\n\n{ticker_list_str}"
+        # Immediate notification of active filers
+        ticker_list_str = "\n".join([f"• **{row['Ticker']}**: {row['Filing_Title']}" for _, row in df_active_filers.iterrows()])
+        initial_message = f"🚀 **{len(df_active_filers)} New Filings Detected!**\nStarting Google Search intelligence scan...\n\n{ticker_list_str}"
         send_discord_alert(initial_message, "Real-Time Filing Alert")
 
-        # 4. FETCH detailed financial data
-        df_final_report = fetch_data_for_active_tickers(df_active_filers, delay=0.5)
-        df_final_report.to_csv("active_filings_with_financials.csv", index=False)
-        
+        client = configure_genai()
         report_data = []
-        importance_patterns = [
-            r"Importance Score[:;]?\s*(\d+)/(\d+)",
-            r"Importance Score[:;]?\s*(\d+)",
-            r"Importance Score[:;]?\s*(\d+)(?:/(\d+))?"
-        ]
+        
+        # Convert active filers to dictionary records
+        filers_records = df_active_filers.to_dict('records')
+        batch_size = 5  # Group tickers to optimize Search Grounding & rate limits
 
-        # 5. START GEMINI JOBS
-        for idx, row in df_final_report.iterrows():
-            ticker = row['Ticker']
-            filing_url = row['Filing_URL']
+        print(f"\n--- Running Google Search on {len(filers_records)} Filers (Batches of {batch_size}) ---")
+        for i in range(0, len(filers_records), batch_size):
+            batch = filers_records[i : i + batch_size]
+            batch_tickers = [b['Ticker'] for b in batch]
+            print(f"Searching Google for batch: {', '.join(batch_tickers)}...")
+
+            batch_results = search_and_analyze_batch(client, batch)
             
-            print(f"--- Processing AI Analysis for {ticker} ---")
-            file_path = download_file(filing_url)
-            
-            if file_path and os.path.exists(file_path):
-                content = extract_text_from_pdf(file_path)
-                analysis_results = analyze_with_gemini(row, content)
-                
-                # Extract text if dictionary
-                if isinstance(analysis_results, dict):
-                    analysis_text = analysis_results.get('analysis', "")
-                else:
-                    analysis_text = analysis_results
+            for item in batch_results:
+                print(f"  🚨 Material News: {item['ticker']}")
+                # Send individual notification immediately to Discord
+                send_to_discord(item['ticker'], item['text'], f"https://money.tmx.com/en/quote/{item['ticker']}")
+                report_data.append(item)
 
-                if not analysis_text:
-                    continue
+            time.sleep(1.5)  # Friendly delay between search batches
 
-                # Scoring Logic
-                skip_sending = False
-                try:
-                    found_match = False
-                    score_val = 0
-                    is_percentage = False
-                    
-                    for pattern in importance_patterns:
-                        match = re.search(pattern, analysis_text)
-                        if match:
-                            groups = match.groups()
-                            if groups[1]: # Fraction
-                                score_val = (int(groups[0]) / int(groups[1])) * 100
-                                is_percentage = True
-                            else: # Single number
-                                score_val = int(groups[0])
-                            found_match = True
-                            break 
-
-                    if found_match:
-                        if (is_percentage and score_val < 60) or (not is_percentage and score_val <= 6):
-                            print(f"Score {score_val} too low for {ticker}. Skipping Discord notification.")
-                            skip_sending = True
-                except Exception as e:
-                    print(f"Scoring error: {e}")
-
-                if not skip_sending:
-                    send_to_discord(ticker, analysis_text, filing_url)
-                    report_data.append({"ticker": ticker, "text": analysis_text})
-                
-                os.remove(file_path) # Clean up downloaded PDF
-            else:
-                send_to_discord(ticker, f"⚠️ Failed to download filing for manual review.", filing_url)
-
-            time.sleep(2) # Prevent API rate limits
-
-        # 6. FINAL SUMMARY & PDF GENERATION
+        # ---------------------------------------------------------
+        # 4. FINAL SUMMARY & TYPST REPORT COMPILATION
+        # ---------------------------------------------------------
         if report_data:
             with open("scraped_data.json", "w") as f:
-                json.dump(report_data, f)
+                json.dump(report_data, f, indent=2)
 
+            # High-level summary of top actionable plays
             report_summaries = [f"Ticker: {item['ticker']}\n{item['text']}" for item in report_data]
-            summary_prompt = f"Summarize the top 5 most actionable opportunities from these reports:\n\n" + "\n\n".join(report_summaries)
+            summary_prompt = (
+                "You are a Canadian equity analyst. Review these recent updates and summarize "
+                "the top 5 most actionable opportunities/takeaways:\n\n" + "\n\n".join(report_summaries)
+            )
 
-            client = configure_genai()
-            models_to_use = get_available_models()
-            
-            summary_generated = False
-            for model_id in models_to_use:
+            for model_id in get_available_models():
                 try:
-                    print(f"Generating final summary with {model_id}...")
+                    print(f"Generating overall summary with {model_id}...")
                     response = client.models.generate_content(model=model_id, contents=summary_prompt)
-                    send_to_discord("Daily High-Impact Summary", response.text, "https://github.com/dli-invest/stock_parser")
-                    summary_generated = True
+                    send_discord_alert(response.text, "📊 Daily High-Impact Market Summary")
                     break
                 except Exception as e:
                     print(f"Summary failed on {model_id}: {e}")
                     continue
 
-            # Generate PDF Report
+            # Typst PDF Report
             try:
+                print("\n--- Compiling Typst PDF Report ---")
                 sys_inputs = {"summaries": json.dumps(report_data)}
                 typst.compile(input="report.typ", output="report.pdf", sys_inputs=sys_inputs)
                 send_pdf_to_discord("report.pdf")
+                print("✅ Report successfully compiled and uploaded.")
             except Exception as e:
                 print(f"Typst PDF failure: {e}")
+        else:
+            print("\nScan complete: No material strategic events detected among today's filings.")
+            send_discord_alert("Scan finished: None of today's filings met the threshold for material corporate impact.", "Daily Summary")
+
+# =====================================================================
+# ORIGINAL EXECUTION FLOW (COMMENTED OUT BELOW FOR REFERENCE)
+# =====================================================================
+# if __name__ == "__main__":
+#     # 1. Setup and Filter Tickers
+#     url = "https://www.tsx.com/en/resource/571"
+#     file_tsx_tsxv = download_file(url)
+# 
+#     if file_tsx_tsxv is None:
+#         print("CRITICAL: Could not download the TSX Excel file. Script stopping.")
+#         file_tsx_tsxv = "tsx-and-amp-tsxv-listed-companies-2026-08-14-en.xlsx"
+#         print("swapping to file_tsx_tsxv", file_tsx_tsxv)
+#     ticker_col_name_actual = 'Root\nTicker' 
+#     output_csv_file = 'non_etf_tickers.csv'
+# 
+#     df_result = filter_exchange_listings(
+#         file_path=file_tsx_tsxv, 
+#         ticker_col_name=ticker_col_name_actual, 
+#         output_file=output_csv_file
+#     )
+# 
+#     new_filter_list = [
+#         {"type": "numeric", "column_key": "Market Cap", "operator": ">=", "threshold": 1e7},
+#         {"type": "numeric", "column_key": "Market Cap", "operator": "<", "threshold": 7e8}, 
+#     ]
+#     
+#     df_filtered = filter_tickers(
+#         file_path=output_csv_file, 
+#         filter_list=new_filter_list, 
+#         final_output_file='filtered.csv'
+#     )
+# 
+#     # 2. IDENTIFY FILINGS
+#     df_active_filers = identify_tickers_with_new_filings(df_filtered)
+# 
+#     # 3. IMMEDIATE NOTIFICATION LOGIC
+#     if df_active_filers.empty:
+#         print("\nNo companies filed documents today.")
+#         send_discord_alert("📭 No new filings found today for the filtered universe.", "Daily Scan Complete")
+#     else:
+#         # Send the "Quick Release" list immediately
+#         ticker_list_str = "\n".join([f"• **{row['Ticker']}**: {row['Filing_Title']}" for idx, row in df_active_filers.iterrows()])
+#         initial_message = f"🚀 **{len(df_active_filers)} New Filings Detected!**\nStarting deep analysis now...\n\n{ticker_list_str}"
+#         send_discord_alert(initial_message, "Real-Time Filing Alert")
+# 
+#         # 4. FETCH detailed financial data
+#         df_final_report = fetch_data_for_active_tickers(df_active_filers, delay=0.5)
+#         df_final_report.to_csv("active_filings_with_financials.csv", index=False)
+#         
+#         report_data = []
+#         importance_patterns = [
+#             r"Importance Score[:;]?\s*(\d+)/(\d+)",
+#             r"Importance Score[:;]?\s*(\d+)",
+#             r"Importance Score[:;]?\s*(\d+)(?:/(\d+))?"
+#         ]
+# 
+#         # 5. START GEMINI JOBS
+#         for idx, row in df_final_report.iterrows():
+#             ticker = row['Ticker']
+#             filing_url = row['Filing_URL']
+#             
+#             print(f"--- Processing AI Analysis for {ticker} ---")
+#             file_path = download_file(filing_url)
+#             
+#             if file_path and os.path.exists(file_path):
+#                 content = extract_text_from_pdf(file_path)
+#                 analysis_results = analyze_with_gemini(row, content)
+#                 
+#                 # Extract text if dictionary
+#                 if isinstance(analysis_results, dict):
+#                     analysis_text = analysis_results.get('analysis', "")
+#                 else:
+#                     analysis_text = analysis_results
+# 
+#                 if not analysis_text:
+#                     continue
+# 
+#                 # Scoring Logic
+#                 skip_sending = False
+#                 try:
+#                     found_match = False
+#                     score_val = 0
+#                     is_percentage = False
+#                     
+#                     for pattern in importance_patterns:
+#                         match = re.search(pattern, analysis_text)
+#                         if match:
+#                             groups = match.groups()
+#                             if groups[1]: # Fraction
+#                                 score_val = (int(groups[0]) / int(groups[1])) * 100
+#                                 is_percentage = True
+#                             else: # Single number
+#                                 score_val = int(groups[0])
+#                             found_match = True
+#                             break 
+# 
+#                     if found_match:
+#                         if (is_percentage and score_val < 60) or (not is_percentage and score_val <= 6):
+#                             print(f"Score {score_val} too low for {ticker}. Skipping Discord notification.")
+#                             skip_sending = True
+#                 except Exception as e:
+#                     print(f"Scoring error: {e}")
+# 
+#                 if not skip_sending:
+#                     send_to_discord(ticker, analysis_text, filing_url)
+#                     report_data.append({"ticker": ticker, "text": analysis_text})
+#                 
+#                 os.remove(file_path) # Clean up downloaded PDF
+#             else:
+#                 send_to_discord(ticker, f"⚠️ Failed to download filing for manual review.", filing_url)
+# 
+#             time.sleep(2) # Prevent API rate limits
+# 
+#         # 6. FINAL SUMMARY & PDF GENERATION
+#         if report_data:
+#             with open("scraped_data.json", "w") as f:
+#                 json.dump(report_data, f)
+# 
+#             report_summaries = [f"Ticker: {item['ticker']}\n{item['text']}" for item in report_data]
+#             summary_prompt = f"Summarize the top 5 most actionable opportunities from these reports:\n\n" + "\n\n".join(report_summaries)
+# 
+#             client = configure_genai()
+#             models_to_use = get_available_models()
+#             
+#             summary_generated = False
+#             for model_id in models_to_use:
+#                 try:
+#                     print(f"Generating final summary with {model_id}...")
+#                     response = client.models.generate_content(model=model_id, contents=summary_prompt)
+#                     send_to_discord("Daily High-Impact Summary", response.text, "https://github.com/dli-invest/stock_parser")
+#                     summary_generated = True
+#                     break
+#                 except Exception as e:
+#                     print(f"Summary failed on {model_id}: {e}")
+#                     continue
+# 
+#             # Generate PDF Report
+#             try:
+#                 sys_inputs = {"summaries": json.dumps(report_data)}
+#                 typst.compile(input="report.typ", output="report.pdf", sys_inputs=sys_inputs)
+#                 send_pdf_to_discord("report.pdf")
+#             except Exception as e:
+#                 print(f"Typst PDF failure: {e}")
