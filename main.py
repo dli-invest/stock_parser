@@ -17,6 +17,7 @@ from pandas import json_normalize, DataFrame # New import for flattening JSON
 from gql_queries import GQL
 from typing import Union
 from pydantic import BaseModel
+from typing import Optional, Dict
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GEMINI_API_KEY")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
