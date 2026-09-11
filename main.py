@@ -789,7 +789,18 @@ def send_to_discord(ticker: str, summary: str, sources: list = None):
     if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "YOUR_WEBHOOK_URL":
         return
 
-    source_text = "\n".join([f"- [{s.get('title', 'Source')}]({s.get('url')})" for s in (sources or [])[:3])
+    if isinstance(sources, str):
+        sources = [{"title": "Filing Source", "url": sources}]
+    
+    formatted_links = []
+    for s in (sources or [])[:3]:
+        if isinstance(s, str) and s:
+            formatted_links.append(f"- [Source]({s})")
+        elif isinstance(s, dict) and s.get("url"):
+            title = s.get("title") or "Source"
+            formatted_links.append(f"- [{title}]({s['url']})")
+    
+    source_text = "\n".join(formatted_links)
     
     payload = {
         "embeds": [{
