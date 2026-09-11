@@ -758,25 +758,6 @@ def filter_tickers(file_path: str, filter_list: list, final_output_file: str) ->
 
     return df_current
 
-import os
-import time
-import pandas as pd
-from typing import Optional, Dict
-from google import genai
-from google.genai import types
-import requests
-
-# ---------------- CONFIGURATION ----------------
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GEMINI_API_KEY")
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK", "YOUR_WEBHOOK_URL")
-
-# You can use Gemma 4 or Gemini 2.5 Flash as primary/fallback models
-MODELS_TO_TRY = [
-    "gemma-4-26b-a4b-it",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-]
-
 def configure_genai() -> genai.Client:
     """Initializes the Google GenAI Client."""
     if not GOOGLE_API_KEY or GOOGLE_API_KEY == "YOUR_GEMINI_API_KEY":
@@ -838,7 +819,7 @@ def analyze_ticker_with_search(client: genai.Client, ticker: str, company_name: 
        - The immediate business significance.
     """
 
-    for model_id in MODELS_TO_TRY:
+    for model_id in models_to_try:
         try:
             # Enable Search Grounding tool
             response = client.models.generate_content(
@@ -886,6 +867,65 @@ def analyze_ticker_with_search(client: genai.Client, ticker: str, company_name: 
                 continue
 
     return None
+
+def search_and_analyze_batch(client: genai.Client, batch_items: list[dict]) -> list[dict]:
+    """
+    Searches Google for a batch of tickers and their filing titles simultaneously.
+    Returns a list of dicts: [{'ticker': ..., 'text': ...}] for companies with material news.
+    """
+    ticker_lines = "\n".join([f"- **{item['Ticker']}**: Filed '{item['Filing_Title']}'" for item in batch_items])
+    
+    prompt = f"""
+    You are a professional Canadian equity analyst. 
+    The following TSX/TSXV listed companies have filed documents today:
+    {ticker_lines}
+
+    TASK:
+    Use Google Search to locate official press releases, news articles, or SEDAR+ regulatory details 
+    from the last 48 hours for each company above.
+
+    OUTPUT FORMAT:
+    For each company with MATERIAL news (e.g., M&A, private placements/financings, earnings, major contracts, clinical results):
+    ### TICKER: <SYMBOL>
+    <Write a concise 1-paragraph summary explaining what happened, specific dollar amounts/share figures, and the business impact.>
+
+    CRITICAL RULE:
+    If a filing is routine/administrative (e.g., meeting notice, routine fee, insider report) or has NO material news, 
+    completely omit that ticker from your response.
+    """
+
+    for model_id in get_available_models():
+        try:
+            response = client.models.generate_content(
+                model=model_id,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[{"google_search": {}}],  # Activates live web search grounding
+                    temperature=0.2,
+                )
+            )
+            raw_text = response.text.strip()
+            
+            # Parse out the tickers and paragraphs
+            results = []
+            sections = re.split(r'###\s*TICKER:\s*', raw_text, flags=re.IGNORECASE)
+            for sec in sections:
+                if not sec.strip():
+                    continue
+                lines = sec.strip().split("\n", 1)
+                ticker = lines[0].strip().replace("**", "").replace("*", "")
+                summary = lines[1].strip() if len(lines) > 1 else ""
+                if ticker and summary:
+                    results.append({"ticker": ticker, "text": summary})
+            
+            return results
+
+        except Exception as e:
+            print(f"⚠️ Search grounding error on {model_id}: {e}")
+            time.sleep(1)
+            continue
+
+    return []
 
 # ---------------- MAIN BATCH RUNNER ----------------
 def run_market_scan(df_filtered_tickers: pd.DataFrame, delay_between_calls: float = 0.5):
